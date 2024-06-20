@@ -1,9 +1,8 @@
 Require Import Autosubst2.syntax ssreflect ssrbool.
 From Hammer Require Import Tactics.
-From stdpp Require Import relations (rtc(..)).
+From stdpp Require Import relations (rtc(..), rtc_transitive).
 
 Reserved Infix "⤳h" (at level 60, no associativity).
-Reserved Infix "⤳n" (at level 60, no associativity).
 Reserved Infix "⇒" (at level 60, no associativity).
 Reserved Infix "⇒n" (at level 60, no associativity).
 
@@ -149,6 +148,8 @@ Proof.
   - hauto lq:on ctrs:ERed.
 Qed.
 
+Notation "s ⤳*h t" := (rtc ERed s t) (at level 60, no associativity).
+
 Lemma hms_merge t a u  :
   t ⇒n a ->
   a ⤳h u ->
@@ -266,3 +267,16 @@ Proof.
     hauto lq:on ctrs:starseq inv:nat use:ipar_starseq_morphing.
   - eauto using starseq_abs_cong.
 Qed.
+
+(* Erase the information about one step par from starseq *)
+Lemma starseq_erase a b (h : starseq a b) :
+  exists u, a ⤳*h u /\ u ⇒n b.
+Proof.
+  elim : a b /h; hauto lq:on ctrs:rtc.
+Qed.
+
+Lemma local_postponement t a u  :
+  t ⇒n a ->
+  a ⤳h u ->
+  exists q, t ⤳*h q /\ q ⇒n u.
+Proof. sfirstorder use:hms_split, hms_merge, starseq_erase. Qed.
