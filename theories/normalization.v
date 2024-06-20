@@ -7,13 +7,6 @@ Reserved Infix "⤳n" (at level 60, no associativity).
 Reserved Infix "⇒" (at level 60, no associativity).
 Reserved Infix "⇒n" (at level 60, no associativity).
 
-Fixpoint count_var n (a : tm) :=
-  match a with
-  | var_tm i => if Nat.eqb n i then 1 else 0
-  | tAbs a => count_var (S n) a
-  | tApp a b => count_var n a + count_var n b
-  end.
-
 Definition isAbs a :=
   match a with
   | tAbs _ => true
@@ -75,25 +68,30 @@ Proof.
   - hauto lq:on ctrs:Par.
 Qed.
 
-Lemma Par_morphing a b :
+Lemma morphing_suc ρ0 ρ1 :
+  (forall i, ρ0 i ⇒ ρ1 i) ->
+  (forall i, (up_tm_tm ρ0) i ⇒ (up_tm_tm ρ1) i).
+Proof.
+  move => > ? []//=.
+  - sfirstorder.
+  - move => n. asimpl.
+    sfirstorder use:Par_renaming.
+Qed.
+
+Lemma Par_morphing a b (h : a ⇒ b):
   forall ρ0 ρ1, (forall i, ρ0 i ⇒ ρ1 i) ->
              subst_tm ρ0 a ⇒ subst_tm ρ1 b.
-
-(* Parallel reduction *)
-Inductive IPar : nat -> tm -> tm -> Prop :=
-| IP_Var i :
-  IPar 0 (var_tm i) (var_tm i)
-| IP_App k0 a0 a1 k1 b0 b1 :
-  IPar k0 a0 a1 ->
-  IPar k1 b0 b1 ->
-  IPar (k0 + k1) (tApp a0 b0) (tApp a1 b1)
-| IP_AppAbs k0 a0 a1 k1 b0 b1 :
-  IPar k0 a0 a1 ->
-  IPar k1 b0 b1 ->
-  IPar (k0 + count_var 0 a1 * k1 + 1) (tApp (tAbs a0) b0) (subst_tm (b1..) a1)
-| IP_Abs k a0 a1 :
-  IPar k a0 a1 ->
-  IPar k (tAbs a0) (tAbs a1).
+Proof.
+  elim : a b / h.
+  - sfirstorder.
+  - hauto lq:on ctrs:Par.
+  - move => */=.
+    apply : P_AppAbs'; cycle 1.
+    sfirstorder use:morphing_suc.
+    sfirstorder.
+    by asimpl.
+  - hauto lq:on ctrs:Par use:morphing_suc.
+Qed.
 
 (* Parallel, non-essential reduction *)
 Inductive NPar : tm -> tm -> Prop :=
@@ -118,6 +116,38 @@ where "a ⇒n b":= (NPar a b).
 
 Lemma NPar_Par a b : a ⇒n b -> a ⇒ b.
 Proof. induction 1; hauto lq:on ctrs:Par. Qed.
+
+Lemma NPar_renaming a b :
+  a ⇒n b ->
+  forall ξ, ren_tm ξ a ⇒n ren_tm ξ b.
+Proof.
+  move => h.
+  elim:a b/h.
+  - sfirstorder.
+  - hauto lq:on ctrs:NPar use:Par_renaming.
+  - hauto lq:on ctrs:NPar.
+  - hauto lq:on ctrs:NPar use:Par_renaming.
+Qed.
+
+Lemma isAbs_renaming a ξ : isAbs a = isAbs (ren_tm ξ a).
+Proof. elim : a ξ => //=. Qed.
+
+Lemma ER_AppAbs' a b u :
+  u = subst_tm (b..) a ->
+  tApp (tAbs a) b ⤳h u.
+Proof. move => ->. by apply ER_AppAbs. Qed.
+
+Lemma ERed_renaming a b :
+  a ⤳h b ->
+  forall ξ, ren_tm ξ a ⤳h ren_tm ξ b.
+Proof.
+  move => h.
+  elim : a b /h.
+  - hauto lq:on ctrs:ERed use:isAbs_renaming.
+  - move => a b ξ /=.
+    apply : ER_AppAbs'. by asimpl.
+  - hauto lq:on ctrs:ERed.
+Qed.
 
 Lemma hms_merge t a u  :
   t ⇒n a ->
@@ -144,6 +174,15 @@ Inductive starseq : tm -> tm -> Prop :=
   M ⇒ N ->
   starseq P N ->
   starseq M N.
+
+Lemma starseq_renaming ξ a b :
+  starseq a b ->
+  starseq (ren_tm ξ a) (ren_tm ξ b).
+Proof.
+  move => h.
+  elim : a b /h;
+    hauto lq:on ctrs:starseq use:NPar_renaming, Par_renaming, ERed_renaming.
+Qed.
 
 Lemma starseq_app_cong M N P Q :
   starseq M N ->
@@ -189,7 +228,7 @@ Proof.
     apply starseq_app_cong.
     sfirstorder.
     (* par cong *)
-    admit.
+    sfirstorder use:Par_morphing, starseq_ρ_par.
   - move => a0 a1 b0 b1 ha iha hb ihb ρ0 ρ1 h.
     simpl.
     apply : S_Step.
@@ -197,9 +236,9 @@ Proof.
     apply P_AppAbs' with (a1 := subst_tm (up_tm_tm ρ1) a1) (b1 := subst_tm ρ1 b1).
     by asimpl.
     (* par cong *)
-    admit.
+    sfirstorder use:Par_morphing, starseq_ρ_par, morphing_suc.
     (* par cong *)
-    admit.
+    sfirstorder use:Par_morphing, starseq_ρ_par.
     asimpl.
     apply iha.
     case => //=.
@@ -210,9 +249,9 @@ Proof.
     case => //=; asimpl.
     hauto l:on.
     move => n. asimpl.
+    sfirstorder use:starseq_renaming.
     (* renaming *)
-    admit.
-Admitted.
+Qed.
 
 Lemma hms_split t s (h : t ⇒ s) :
   starseq t s.
@@ -224,6 +263,6 @@ Proof.
     apply : S_Step.
     by apply ER_AppAbs.
     by apply P_AppAbs.
-    best use:ipar_starseq_morphing.
+    hauto lq:on ctrs:starseq inv:nat use:ipar_starseq_morphing.
   - eauto using starseq_abs_cong.
-Admitted.
+Qed.
