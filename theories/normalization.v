@@ -300,40 +300,19 @@ Proof.
       case : a E ha0 ha1 => //=.
       hauto inv:ERed, Par use:starseq_par, S_Refl, PN_AppAbs.
     + case E0 : (ne a).
-      * have ? : a0 = a by admit. subst.
+      * have ? : a0 = a by move : ha0 E0; clear; hauto q:on use:ERed_Par, ne_par_id. subst.
         apply iha=>//.
       * apply S_Step with (P := tApp a0 b0).
         hauto lq:on ctrs:ERed.
         sfirstorder use: P_App, starseq_par.
         sfirstorder.
-Admitted.
-
-Lemma hms_split t s (h : t ⇒ s) :
-  starseq t s.
-Proof.
-  elim : t s /h .
-  - hauto lq:on ctrs:NPar, starseq.
-  - eauto using starseq_app_cong.
-  - move => a0 a1 b0 b1 ha iha hb ihb.
-    apply : S_Step.
-    by apply ER_AppAbs.
-    by apply P_AppAbs.
-    hauto lq:on ctrs:starseq inv:nat use:ipar_starseq_morphing.
-  - eauto using starseq_abs_cong.
 Qed.
-
-
-
 
 Lemma starseq_abs_cong M N
   (h : starseq M N) :
   starseq (tAbs M) (tAbs N).
 Proof. elim:M N/h; hauto lq:on ctrs:starseq, NPar, Par, ERed. Qed.
 
-Lemma starseq_par a b :
-  starseq a b ->
-  a ⇒ b.
-Proof. induction 1; sfirstorder use:NPar_Par. Qed.
 
 Lemma starseq_ρ_par ρ0 ρ1 :
   (forall i : fin, starseq (ρ0 i) (ρ1 i)) ->
@@ -374,7 +353,20 @@ Proof.
     hauto l:on.
     move => n. asimpl.
     sfirstorder use:starseq_renaming.
-    (* renaming *)
+Qed.
+
+Lemma hms_split t s (h : t ⇒ s) :
+  starseq t s.
+Proof.
+  elim : t s /h .
+  - hauto lq:on ctrs:NPar, starseq.
+  - eauto using starseq_app_cong.
+  - move => a0 a1 b0 b1 ha iha hb ihb.
+    apply : S_Step.
+    by apply ER_AppAbs.
+    by apply P_AppAbs.
+    hauto lq:on ctrs:starseq inv:nat use:ipar_starseq_morphing.
+  - eauto using starseq_abs_cong.
 Qed.
 
 Lemma hms_merge t a u  :
