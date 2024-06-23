@@ -92,11 +92,6 @@ Inductive NPar : tm -> tm -> Prop :=
 | PN_Var i :
   var_tm i ⇒n var_tm i
 
-(* | PN_AppAbs a0 a1 b0 b1 : *)
-(*   a0 ⇒ a1 -> *)
-(*   b0 ⇒ b1 -> *)
-(*   tApp (tAbs a0) b0 ⇒n tApp (tAbs a1) b1 *)
-
 | PN_Abs a0 a1 :
   a0 ⇒ a1 ->
   tAbs a0 ⇒n tAbs a1
@@ -366,10 +361,39 @@ Lemma EReds_LoReds a b :
   rtc ERed a b -> rtc LoRed a b.
 Proof. sfirstorder use:relations.rtc_subrel, ERed_LoRed unfold:subrel. Qed.
 
+Lemma NPars_Pars a b :
+  rtc NPar a b -> rtc Par a b.
+Proof. sfirstorder use:relations.rtc_subrel, NPar_Par unfold:subrel. Qed.
+
 Lemma LoRed_Abs_Cong a b :
   rtc LoRed a b ->
   rtc LoRed (tAbs a) (tAbs b).
 Proof. move => h. elim:a b/h; hauto lq:on ctrs:LoRed, rtc. Qed.
+
+Lemma LoRed_Abs_inv a b :
+  rtc LoRed a b ->
+  isAbs a -> isAbs b.
+Proof. induction 1; hauto lq:on inv:LoRed. Qed.
+
+Lemma LoRed_App_Cong a0 a1 b0 b1 :
+  rtc LoRed a0 a1 ->
+  ne a1 ->
+  rtc LoRed b0 b1 ->
+  rtc LoRed (tApp a0 b0) (tApp a1 b1).
+Proof.
+  move => h. move : b0 b1.
+  elim : a0 a1 /h.
+  - move => a b0 b1 h h0.
+    elim : b0 b1 /h0; hauto lq:on ctrs:rtc,LoRed.
+  - move => a0 a1 a2 h0 h1 ih b0 b1 ha2 h.
+    move : ih h (ha2) => /[apply]/[apply] h.
+    apply : rtc_l; eauto.
+    apply LoR_App0=>//.
+    apply /negP.
+    move => ?.
+    have : isAbs a2 by hauto q:on ctrs:rtc use:LoRed_Abs_inv.
+    move : ha2; clear. elim : a2 => //=.
+Qed.
 
 Lemma NPar_App_inv u a b :
   rtc NPar u (tApp a b) ->
@@ -409,8 +433,8 @@ Proof.
     move => [].
     move /NPar_App_inv : hu0.
     move => [a0][b0][?][h0]h1. subst.
-    move/ne_is_nf.
-    (* move  :iha h0; repeat move /[apply]. move => ?. *)
-    (* move  :ihb h1; repeat move /[apply]. move => ?. *)
-    admit.
-Admitted.
+    move /[dup] /ne_is_nf => *.
+    have {}iha:rtc LoRed a0 a by sfirstorder use:NPars_Pars.
+    have {}ihb:rtc LoRed b0 b by sfirstorder.
+    hauto lq:on ctrs:rtc use:LoRed_App_Cong, rtc_transitive, EReds_LoReds.
+Qed.

@@ -1,9 +1,13 @@
 # A Coq mechanization of the factorization theorem for the untyped lambda calculus
 This repository contains mechanized proofs Hindley's postponement
-theorem for the head reduction
+theorem for the weak head reduction
 ([normalization_h.v](theories/normalization_h.v))
 and leftmost-outermost reduction
 ([normalization_lo.v](theories/normalization_lo.v)) strategies.
+
+Note that [normalization_h.v](theories/normalization_h.v) also
+includes a proof that recovers the standardization theorem from
+factorization theorem for weak head reduction.
 
 The proof is based on
 [Takahashi's
@@ -12,10 +16,9 @@ and structured in a way similar to [Accattoli et
 al. 2019](https://link.springer.com/chapter/10.1007/978-3-030-34175-6_9).
 
 I managed to prove
-postponement for leftmost-outermost reduction directly without using
-the complex setup involving indexed parallel reduction, a proof device
-introduced by Accattoli to work around the limitation of Takahashi's
-method.
+postponement for leftmost-outermost reduction directly without indexed
+parallel reduction, a proof device introduced by Accattoli to work
+around the limitation of Takahashi's method.
 
 Indexed parallel reduction is nice on paper, but is painful to
 mechanize, especially when the development relies on simultaneous
@@ -32,3 +35,7 @@ the development) to remove the dependency on the left-substitutivity
 of the essential reduction relation. This revised statement not only
 holds for both head and lo reductions, but is also much easier to
 prove.
+
+Still, I find it more intuitive to recover leftmost-outermost
+standardization from the factorization theorem for weak head
+reduction, a useful result on its own.
