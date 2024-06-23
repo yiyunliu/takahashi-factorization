@@ -14,16 +14,11 @@ Definition isAbs a :=
 
 Inductive ERed : tm -> tm -> Prop :=
 | ER_App a0 a1 b :
-  ~~ isAbs a0 ->
   a0 ⤳h a1 ->
   tApp a0 b ⤳h tApp a1 b
 
 | ER_AppAbs a b :
   tApp (tAbs a) b ⤳h subst_tm (b..) a
-
-| ER_Abs a b :
-  a ⤳h b ->
-  tAbs a ⤳h tAbs b
 
 where "a ⤳h b" := (ERed a b).
 
@@ -97,13 +92,13 @@ Inductive NPar : tm -> tm -> Prop :=
 | PN_Var i :
   var_tm i ⇒n var_tm i
 
-| PN_AppAbs a0 a1 b0 b1 :
-  a0 ⇒ a1 ->
-  b0 ⇒ b1 ->
-  tApp (tAbs a0) b0 ⇒n tApp (tAbs a1) b1
+(* | PN_AppAbs a0 a1 b0 b1 : *)
+(*   a0 ⇒ a1 -> *)
+(*   b0 ⇒ b1 -> *)
+(*   tApp (tAbs a0) b0 ⇒n tApp (tAbs a1) b1 *)
 
 | PN_Abs a0 a1 :
-  a0 ⇒n a1 ->
+  a0 ⇒ a1 ->
   tAbs a0 ⇒n tAbs a1
 
 | PN_App a0 a1 b0 b1 :
@@ -124,12 +119,12 @@ Proof.
   elim:a b/h.
   - sfirstorder.
   - hauto lq:on ctrs:NPar use:Par_renaming.
-  - hauto lq:on ctrs:NPar.
   - hauto lq:on ctrs:NPar use:Par_renaming.
+  (* - hauto lq:on ctrs:NPar use:Par_renaming. *)
 Qed.
 
-Lemma isAbs_renaming a ξ : isAbs a = isAbs (ren_tm ξ a).
-Proof. elim : a ξ => //=. Qed.
+(* Lemma isAbs_renaming a ξ : isAbs a = isAbs (ren_tm ξ a). *)
+(* Proof. elim : a ξ => //=. Qed. *)
 
 Lemma ER_AppAbs' a b u :
   u = subst_tm (b..) a ->
@@ -142,10 +137,9 @@ Lemma ERed_renaming a b :
 Proof.
   move => h.
   elim : a b /h.
-  - hauto lq:on ctrs:ERed use:isAbs_renaming.
+  - hauto lq:on ctrs:ERed.
   - move => a b ξ /=.
     apply : ER_AppAbs'. by asimpl.
-  - hauto lq:on ctrs:ERed.
 Qed.
 
 Notation "s ⤳*h t" := (rtc ERed s t) (at level 60, no associativity).
@@ -160,7 +154,7 @@ Proof.
   elim : t a / h.
   - hauto lq:on ctrs:Par inv:ERed.
   - hauto q:on ctrs:Par inv:ERed.
-  - hauto lq:on ctrs:Par inv:ERed.
+  (* - hauto lq:on ctrs:Par inv:ERed. *)
   - hauto lq:on inv:NPar, ERed ctrs:Par use:NPar_Par.
 Qed.
 
@@ -197,20 +191,23 @@ Proof.
     + apply S_Refl.
       case : M hMP hMN E=>//.
       move => M.
-      elim/ered_inv=>//_ a0 b0 hab0 [?] ? h _. subst.
-      hauto lq:on inv:Par ctrs:NPar.
+      elim/ered_inv=>//_ a0 b0 hab0 [?] ? h _. (* subst. *)
+      (* hauto lq:on inv:Par ctrs:NPar. *)
     + hauto lq:on ctrs:starseq, NPar, Par, ERed.
 Qed.
-
-Lemma starseq_abs_cong M N
-  (h : starseq M N) :
-  starseq (tAbs M) (tAbs N).
-Proof. elim:M N/h; hauto lq:on ctrs:starseq, NPar, Par, ERed. Qed.
 
 Lemma starseq_par a b :
   starseq a b ->
   a ⇒ b.
 Proof. induction 1; sfirstorder use:NPar_Par. Qed.
+
+Lemma starseq_abs_cong M N
+  (h : starseq M N) :
+  starseq (tAbs M) (tAbs N).
+Proof.
+  apply S_Refl.
+  hauto lq:on ctrs:NPar use:starseq_par.
+Qed.
 
 Lemma starseq_ρ_par ρ0 ρ1 :
   (forall i : fin, starseq (ρ0 i) (ρ1 i)) ->
@@ -280,3 +277,140 @@ Lemma local_postponement t a u  :
   a ⤳h u ->
   exists q, t ⤳*h q /\ q ⇒n u.
 Proof. sfirstorder use:hms_split, hms_merge, starseq_erase. Qed.
+
+Lemma local_postponement_star t a u :
+  t ⇒n a ->
+  a ⤳*h u ->
+  exists q, t ⤳*h q /\ q ⇒n u.
+  move => + h. move : t. elim : a u / h.
+  sfirstorder.
+  qauto l:on ctrs:rtc use:local_postponement, rtc_transitive.
+Qed.
+
+Lemma factorization t u :
+  rtc Par t u ->
+  exists v, rtc ERed t v /\ rtc NPar v u.
+Proof.
+  move => h. elim:t u/h=>//=.
+  - hauto lq:on ctrs:rtc.
+  - move => a b c ha hb [v][ihb0]ihb1.
+    move /hms_split /starseq_erase : ha.
+    move => [u][hu0]hu1.
+    move : local_postponement_star ihb0 hu1; repeat move/[apply].
+    move => [q][hq0]hq1.
+    exists q. hauto lq:on ctrs:rtc use:rtc_transitive.
+Qed.
+
+Fixpoint ne a :=
+  match a with
+  | var_tm _ => true
+  | tAbs _ => false
+  | tApp a b => ne a && nf b
+  end
+with nf a :=
+  match a with
+  | var_tm _ => true
+  | tAbs a => nf a
+  | tApp a b => ne a && nf b
+  end.
+
+Lemma ne_is_nfb a : ne a ==> nf a.
+Proof. elim : a; hauto lqb:on. Qed.
+
+Lemma ne_is_nf a : ne a -> nf a.
+Proof. sfirstorder use:ne_is_nfb b:on. Qed.
+
+
+Inductive LoRed : tm -> tm -> Prop :=
+| LoR_App0 a0 a1 b :
+  ~~ isAbs a0 ->
+  LoRed a0 a1 ->
+  LoRed (tApp a0 b) (tApp a1 b)
+
+| LoR_App1 a b0 b1 :
+  ne a ->
+  LoRed b0 b1 ->
+  LoRed (tApp a b0) (tApp a b1)
+
+| LoR_AppAbs a b :
+  LoRed (tApp (tAbs a) b) (subst_tm (b..) a)
+
+| LoR_Abs a b :
+  LoRed a b ->
+  LoRed (tAbs a) (tAbs b).
+
+Lemma NPar_Var_inv a i :
+  rtc NPar a (var_tm i) ->
+  a = var_tm i.
+Proof.
+  move E : (var_tm i) => T h. move : i E.
+  elim: a T/h; hauto lq:on rew:off inv:NPar ctrs:NPar, rtc.
+Qed.
+
+Lemma NPar_Abs_inv a b :
+  rtc NPar a (tAbs b) ->
+  exists a0, a = tAbs a0 /\ rtc Par a0 b.
+Proof.
+  move E : (tAbs b) => T h.
+  move : b E.
+  elim : a T/h; hauto lq:on ctrs:rtc inv:NPar.
+Qed.
+
+Lemma ERed_LoRed a b :
+  ERed a b -> LoRed a b.
+Proof.
+  induction 1; hauto lq:on inv:ERed ctrs:LoRed.
+Qed.
+
+Lemma EReds_LoReds a b :
+  rtc ERed a b -> rtc LoRed a b.
+Proof. sfirstorder use:relations.rtc_subrel, ERed_LoRed unfold:subrel. Qed.
+
+Lemma LoRed_Abs_Cong a b :
+  rtc LoRed a b ->
+  rtc LoRed (tAbs a) (tAbs b).
+Proof. move => h. elim:a b/h; hauto lq:on ctrs:LoRed, rtc. Qed.
+
+Lemma NPar_App_inv u a b :
+  rtc NPar u (tApp a b) ->
+  exists a0 b0, u = tApp a0 b0 /\ rtc NPar a0 a /\ rtc Par b0 b.
+Proof.
+  move E : (tApp a b) => T h.
+  move : a b E.
+  elim : u T /h.
+  - hauto lq:on ctrs:rtc inv:NPar.
+  - move => a0 b0 c ha hb ihb a b ?. subst.
+    specialize ihb with (1 := eq_refl).
+    move : ihb => [a1][b1][?][ih0]ih1. subst.
+    inversion ha; subst.
+    hauto lq:on ctrs:Par, rtc.
+Qed.
+
+Definition whnf (a : tm) :=
+  match a with
+  | tAbs _ => true
+  | _ => false
+  end.
+
+Lemma standardization a b :
+  rtc Par a b -> nf b ->
+  rtc LoRed a b.
+Proof.
+  elim : b a =>//=.
+  - move => n a /factorization.
+    hauto lq:on rew:off use:NPar_Var_inv, EReds_LoReds.
+  - move => b ihb a /factorization.
+    move => [a0][h0].
+    move /NPar_Abs_inv => [a1][?]ha1. subst.
+    move : ihb ha1; repeat move/[apply].
+    hauto lq:on use:LoRed_Abs_Cong, EReds_LoReds, rtc_transitive.
+  - move => a iha b ihb u /factorization.
+    move => [u0][hu]hu0 /andP.
+    move => [].
+    move /NPar_App_inv : hu0.
+    move => [a0][b0][?][h0]h1. subst.
+    move/ne_is_nf.
+    (* move  :iha h0; repeat move /[apply]. move => ?. *)
+    (* move  :ihb h1; repeat move /[apply]. move => ?. *)
+    admit.
+Admitted.
