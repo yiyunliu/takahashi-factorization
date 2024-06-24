@@ -12,6 +12,13 @@ Definition isAbs a :=
   | _ => false
   end.
 
+Definition isBoolVal a :=
+  match a with
+  | tTrue => true
+  | tFalse => true
+  | _ => false
+  end.
+
 Inductive ERed : tm -> tm -> Prop :=
 | ER_App a0 a1 b :
   a0 ⤳h a1 ->
@@ -20,6 +27,15 @@ Inductive ERed : tm -> tm -> Prop :=
 | ER_AppAbs a b :
   tApp (tAbs a) b ⤳h subst_tm (b..) a
 
+| ER_If a0 a1 b c  :
+  a0 ⤳h a1 ->
+  tIf a0 b c ⤳h tIf a1 b c
+
+| ER_IfTrue b c  :
+  tIf tTrue b c ⤳h b
+
+| ER_IfFalse b c  :
+  tIf tFalse b c ⤳h c
 where "a ⤳h b" := (ERed a b).
 
 Derive Inversion ered_inv with (forall a b, ERed a b).
@@ -39,6 +55,20 @@ Inductive Par : tm -> tm -> Prop :=
 | P_Abs a0 a1 :
   a0 ⇒ a1 ->
   tAbs a0 ⇒ tAbs a1
+
+| P_If a0 a1 b0 b1 c0 c1 :
+  a0 ⇒ a1 ->
+  b0 ⇒ b1 ->
+  c0 ⇒ c1 ->
+  tIf a0 b0 c0 ⇒ tIf a1 b1 c1
+
+| P_IfTrue b0 b1 c :
+  b0 ⇒ b1 ->
+  tIf tTrue b0 c ⇒ b1
+| P_IfFalse b c0 c1 :
+  c0 ⇒ c1 ->
+  tIf tFalse b c0 ⇒ c1
+
 where "a ⇒ b" := (Par a b).
 
 Lemma P_AppAbs' a0 a1 b0 b1 t :
@@ -59,6 +89,9 @@ Proof.
   - move => * /=.
     apply : P_AppAbs'; eauto.
     by asimpl.
+  - hauto lq:on ctrs:Par.
+  - hauto lq:on ctrs:Par.
+  - hauto lq:on ctrs:Par.
   - hauto lq:on ctrs:Par.
 Qed.
 
@@ -85,6 +118,9 @@ Proof.
     sfirstorder.
     by asimpl.
   - hauto lq:on ctrs:Par use:morphing_suc.
+  - qauto l:on ctrs:Par.
+  - qauto l:on ctrs:Par.
+  - qauto l:on ctrs:Par.
 Qed.
 
 (* Parallel, non-essential reduction *)
@@ -101,6 +137,12 @@ Inductive NPar : tm -> tm -> Prop :=
   b0 ⇒ b1 ->
   tApp a0 b0 ⇒n tApp a1 b1
 
+| PN_If a0 a1 b0 b1 c0 c1:
+  a0 ⇒n a1 ->
+  b0 ⇒ b1 ->
+  c0 ⇒ c1 ->
+  tIf a0 b0 c0 ⇒n tIf a1 b1 c1
+
 where "a ⇒n b":= (NPar a b).
 
 Lemma NPar_Par a b : a ⇒n b -> a ⇒ b.
@@ -115,7 +157,7 @@ Proof.
   - sfirstorder.
   - hauto lq:on ctrs:NPar use:Par_renaming.
   - hauto lq:on ctrs:NPar use:Par_renaming.
-  (* - hauto lq:on ctrs:NPar use:Par_renaming. *)
+  - hauto lq:on ctrs:NPar use:Par_renaming.
 Qed.
 
 (* Lemma isAbs_renaming a ξ : isAbs a = isAbs (ren_tm ξ a). *)
@@ -135,6 +177,9 @@ Proof.
   - hauto lq:on ctrs:ERed.
   - move => a b ξ /=.
     apply : ER_AppAbs'. by asimpl.
+  - hauto lq:on ctrs:ERed.
+  - hauto lq:on ctrs:ERed.
+  - hauto lq:on ctrs:ERed.
 Qed.
 
 Notation "s ⤳*h t" := (rtc ERed s t) (at level 60, no associativity).
@@ -151,6 +196,7 @@ Proof.
   - hauto q:on ctrs:Par inv:ERed.
   (* - hauto lq:on ctrs:Par inv:ERed. *)
   - hauto lq:on inv:NPar, ERed ctrs:Par use:NPar_Par.
+  - qauto l:on ctrs:Par inv:NPar, ERed.
 Qed.
 
 (* Takahashi's *-sequence *)
@@ -181,14 +227,18 @@ Lemma starseq_app_cong M N P Q :
 Proof.
   move => h. move : P Q. elim : M N / h.
   - sfirstorder use:S_Refl, PN_App.
-  - move => M P N hMP hMN hPN ih R Q hRQ.
-    case E : (isAbs M).
-    + apply S_Refl.
-      case : M hMP hMN E=>//.
-      move => M.
-      elim/ered_inv=>//_ a0 b0 hab0 [?] ? h _. (* subst. *)
-      (* hauto lq:on inv:Par ctrs:NPar. *)
-    + hauto lq:on ctrs:starseq, NPar, Par, ERed.
+  - hauto lq:on ctrs:starseq, NPar, Par, ERed.
+Qed.
+
+Lemma starseq_if_cong M N P Q R S :
+  starseq M N ->
+  P ⇒ Q ->
+  R ⇒ S ->
+  starseq (tIf M P R) (tIf N Q S).
+Proof.
+  move => h. move : P Q R S. elim : M N /h.
+  - sfirstorder use:S_Refl, PN_If.
+  - hauto lq:on ctrs:starseq, NPar, Par, ERed.
 Qed.
 
 Lemma starseq_par a b :
@@ -244,6 +294,9 @@ Proof.
     move => n. asimpl.
     sfirstorder use:starseq_renaming.
     (* renaming *)
+  - sfirstorder use:starseq_if_cong, starseq_ρ_par, Par_morphing.
+  - hauto lq:on ctrs:starseq, ERed, Par use:starseq_ρ_par, Par_morphing.
+  - hauto lq:on ctrs:starseq, ERed, Par use:starseq_ρ_par, Par_morphing.
 Qed.
 
 Lemma hms_split t s (h : t ⇒ s) :
@@ -258,6 +311,9 @@ Proof.
     by apply P_AppAbs.
     hauto lq:on ctrs:starseq inv:nat use:ipar_starseq_morphing.
   - eauto using starseq_abs_cong.
+  - eauto using starseq_if_cong.
+  - hauto lq:on ctrs:starseq, ERed, Par use:starseq_ρ_par, Par_morphing.
+  -  hauto lq:on ctrs:starseq, ERed, Par use:starseq_ρ_par, Par_morphing.
 Qed.
 
 (* Erase the information about one step par from starseq *)
@@ -301,12 +357,18 @@ Fixpoint ne a :=
   | var_tm _ => true
   | tAbs _ => false
   | tApp a b => ne a && nf b
+  | tIf a b c => ne a && nf b && nf c
+  | tTrue => false
+  | tFalse => false
   end
 with nf a :=
   match a with
   | var_tm _ => true
   | tAbs a => nf a
   | tApp a b => ne a && nf b
+  | tIf a b c => ne a && nf b && nf c
+  | tTrue => true
+  | tFalse => true
   end.
 
 Lemma ne_is_nfb a : ne a ==> nf a.
@@ -332,7 +394,28 @@ Inductive LoRed : tm -> tm -> Prop :=
 
 | LoR_Abs a b :
   LoRed a b ->
-  LoRed (tAbs a) (tAbs b).
+  LoRed (tAbs a) (tAbs b)
+
+| LoR_If0 a0 a1 b c :
+  LoRed a0 a1 ->
+  LoRed (tIf a0 b c) (tIf a1 b c)
+
+| LoR_If1 a b0 b1 c :
+  ne a ->
+  LoRed b0 b1 ->
+  LoRed (tIf a b0 c) (tIf a b1 c)
+
+| LoR_If2 a b c0 c1 :
+  ne a ->
+  nf b ->
+  LoRed c0 c1 ->
+  LoRed (tIf a b c0) (tIf a b c1)
+
+| LoR_True b c :
+  LoRed (tIf tTrue b c) b
+
+| LoR_False b c :
+  LoRed (tIf tFalse b c) c.
 
 Lemma NPar_Var_inv a i :
   rtc NPar a (var_tm i) ->
@@ -373,7 +456,7 @@ Proof. move => h. elim:a b/h; hauto lq:on ctrs:LoRed, rtc. Qed.
 Lemma LoRed_Abs_inv a b :
   rtc LoRed a b ->
   isAbs a -> isAbs b.
-Proof. induction 1; hauto lq:on inv:LoRed. Qed.
+Proof. induction 1; hauto inv:LoRed. Qed.
 
 Lemma LoRed_App_Cong a0 a1 b0 b1 :
   rtc LoRed a0 a1 ->
@@ -403,18 +486,55 @@ Proof.
   move : a b E.
   elim : u T /h.
   - hauto lq:on ctrs:rtc inv:NPar.
-  - move => a0 b0 c ha hb ihb a b ?. subst.
-    specialize ihb with (1 := eq_refl).
-    move : ihb => [a1][b1][?][ih0]ih1. subst.
-    inversion ha; subst.
-    hauto lq:on ctrs:Par, rtc.
+  - hauto lq:on inv:NPar ctrs:Par, rtc.
 Qed.
 
-Definition whnf (a : tm) :=
-  match a with
-  | tAbs _ => true
-  | _ => false
-  end.
+Lemma NPar_If_inv u a b c :
+  rtc NPar u (tIf a b c) ->
+  exists a0 b0 c0, u = tIf a0 b0 c0 /\ rtc NPar a0 a /\ rtc Par b0 b /\ rtc Par c0 c.
+Proof.
+  move E : (tIf a b c) => T h.
+  move : a b c E.
+  elim : u T /h.
+  - hauto lq:on ctrs:rtc inv:NPar.
+  - hauto lq:on inv:NPar ctrs:Par, rtc.
+Qed.
+
+Lemma LoRed_If_Cong a0 a1 b0 b1 c0 c1 :
+  rtc LoRed a0 a1 ->
+  ne a1 ->
+  rtc LoRed b0 b1 ->
+  nf b1 ->
+  rtc LoRed c0 c1 ->
+  rtc LoRed (tIf a0 b0 c0) (tIf a1 b1 c1).
+Proof.
+  move => h. move : b0 b1 c0 c1.
+  elim : a0 a1 /h.
+  - move => a b0 b1 + + h h0.
+    elim : b0 b1 /h0; last by hauto lq:on ctrs:rtc,LoRed.
+    move => b c0 c1 hb h0.
+    elim : c0 c1 /h0; hauto lq:on ctrs:rtc,LoRed.
+  - move => a0 a1 a2 h0 h1 ih b0 b1 c0 c1 ha2 h h' hh.
+    move : ih h (ha2) => /[apply]/[apply] h.
+    apply : rtc_l; eauto.
+    apply LoR_If0=>//.
+Qed.
+
+Lemma NPar_True_inv u  :
+  rtc NPar u tTrue -> u = tTrue.
+Proof.
+  move E : tTrue => a h.
+  move : E.
+  elim : u a/h; hauto lq:on inv:NPar.
+Qed.
+
+Lemma NPar_False_inv u  :
+  rtc NPar u tFalse -> u = tFalse.
+Proof.
+  move E : tFalse => a h.
+  move : E.
+  elim : u a/h; hauto lq:on inv:NPar.
+Qed.
 
 Lemma standardization a b :
   rtc Par a b -> nf b ->
@@ -437,4 +557,21 @@ Proof.
     have {}iha:rtc LoRed a0 a by sfirstorder use:NPars_Pars.
     have {}ihb:rtc LoRed b0 b by sfirstorder.
     hauto lq:on ctrs:rtc use:LoRed_App_Cong, rtc_transitive, EReds_LoReds.
+  - move => a iha b ihb c ihc u /factorization.
+    move => [u0][hu]hu0.
+    move/andP => [/andP] []*.
+    move /NPar_If_inv : hu0.
+    move => [a0][b0][c0][?][h0][h1]h2. subst.
+    apply : rtc_transitive; eauto using EReds_LoReds.
+    apply LoRed_If_Cong=>//=; eauto using ne_is_nf, NPars_Pars.
+  - move => a /factorization.
+    move => [u][hu0].
+    move/NPar_True_inv.
+    move => ? _. subst.
+    by move /EReds_LoReds in hu0.
+  - move => a /factorization.
+    move => [u][hu0].
+    move/NPar_False_inv.
+    move => ? _. subst.
+    by move /EReds_LoReds in hu0.
 Qed.
